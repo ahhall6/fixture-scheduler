@@ -1,0 +1,191 @@
+use fixture_scheduler::{round_robin, ScheduleError};
+use std::collections::HashSet;
+
+struct ErrorCase {
+    name: &'static str,
+    teams: &'static [&'static str],
+    expected: ScheduleError,
+}
+
+#[test]
+fn rejects_invalid_input() {
+    let cases = [
+        ErrorCase {
+            name: "no teams",
+            teams: &[],
+            expected: ScheduleError::NotEnoughTeams,
+        },
+        ErrorCase {
+            name: "one team",
+            teams: &["Falcons"],
+            expected: ScheduleError::NotEnoughTeams,
+        },
+        ErrorCase {
+            name: "duplicate team",
+            teams: &["Falcons", "Falcons"],
+            expected: ScheduleError::DuplicateTeam("Falcons".to_string()),
+        },
+        ErrorCase {
+            name: "duplicate team later in the list",
+            teams: &["A", "B", "C", "B"],
+            expected: ScheduleError::DuplicateTeam("B".to_string()),
+        },
+    ];
+
+    for case in cases {
+        let got = round_robin(case.teams);
+        assert_eq!(
+            got,
+            Err(case.expected.clone()),
+            "case '{}' produced {:?}",
+            case.name,
+            got
+        );
+    }
+}
+
+struct ShapeCase {
+    name: &'static str,
+    teams: &'static [&'static str],
+    expected_rounds: usize,
+    expected_fixtures_per_round: usize,
+    expects_bye: bool,
+}
+
+#[test]
+fn produces_the_right_shape() {
+    const SIX: &[&str] = &["A", "B", "C", "D", "E", "F"];
+    const SEVEN: &[&str] = &["A", "B", "C", "D", "E", "F", "G"];
+
+    let cases = [
+        ShapeCase {
+            name: "two teams",
+            teams: &["A", "B"],
+            expected_rounds: 1,
+            expected_fixtures_per_round: 1,
+            expects_bye: false,
+        },
+        ShapeCase {
+            name: "three teams needs a rotating bye",
+            teams: &["A", "B", "C"],
+            expected_rounds: 3,
+            expected_fixtures_per_round: 1,
+            expects_bye: true,
+        },
+        ShapeCase {
+            name: "four teams, no bye",
+            teams: &["A", "B", "C", "D"],
+            expected_rounds: 3,
+            expected_fixtures_per_round: 2,
+            expects_bye: false,
+        },
+        ShapeCase {
+            name: "five teams needs a rotating bye",
+            teams: &["A", "B", "C", "D", "E"],
+            expected_rounds: 5,
+            expected_fixtures_per_round: 2,
+            expects_bye: true,
+        },
+        ShapeCase {
+            name: "six teams, no bye",
+            teams: SIX,
+            expected_rounds: 5,
+            expected_fixtures_per_round: 3,
+            expects_bye: false,
+        },
+        ShapeCase {
+            name: "seven teams needs a rotating bye",
+            teams: SEVEN,
+            expected_rounds: 7,
+            expected_fixtures_per_round: 3,
+            expects_bye: true,
+        },
+    ];
+
+    for case in cases {
+        let rounds = round_robin(case.teams).unwrap_or_else(|e| {
+            panic!("case '{}' failed to schedule: {e}", case.name)
+        });
+
+        assert_eq!(
+            rounds.len(),
+            case.expected_rounds,
+            "case '{}': wrong round count",
+            case.name
+        );
+
+        for round in &rounds {
+            assert_eq!(
+                round.fixtures.len(),
+                case.expected_fixtures_per_round,
+                "case '{}' round {}: wrong fixture count",
+                case.name,
+                round.number
+            );
+            assert_eq!(
+                round.bye.is_some(),
+                case.expects_bye,
+                "case '{}' round {}: unexpected bye state",
+                case.name,
+                round.number
+            );
+        }
+    }
+}
+
+// The part that's easy to get subtly wrong: every pair of teams must meet
+// exactly once, no team ever plays itself, and (for odd-sized leagues)
+// every team sits out exactly once before any team sits out twice.
+#[test]
+fn covers_every_pair_exactly_once() {
+    let cases: &[&[&str]] = &[
+        &["A", "B"],
+        &["A", "B", "C"],
+        &["A", "B", "C", "D"],
+        &["A", "B", "C", "D", "E"],
+        &["A", "B", "C", "D", "E", "F", "G"],
+    ];
+
+    for teams in cases {
+        let rounds = round_robin(teams).unwrap();
+
+        let mut seen_pairs: HashSet<(String, String)> = HashSet::new();
+        let mut bye_counts: std::collections::HashMap<String, usize> =
+            teams.iter().map(|t| (t.to_string(), 0)).collect();
+
+        for round in &rounds {
+            let mut playing_this_round: HashSet<String> = HashSet::new();
+
+            for fixture in &round.fixtures {
+                assert_ne!(fixture.home, fixture.away, "a team was scheduled against itself");
+
+                let pair = if fixture.home < fixture.away {
+                    (fixture.home.clone(), fixture.away.clone())
+                } else {
+                    (fixture.away.clone(), fixture.home.clone())
+                };
+                assert!(
+                    seen_pairs.insert(pair.clone()),
+                    "pair {pair:?} scheduled more than once for {teams:?}"
+                );
+
+                assert!(playing_this_round.insert(fixture.home.clone()));
+                assert!(playing_this_round.insert(fixture.away.clone()));
+            }
+
+            if let Some(bye) = &round.bye {
+                *bye_counts.get_mut(bye).unwrap() += 1;
+                assert!(!playing_this_round.contains(bye), "bye team also has a fixture");
+            }
+        }
+
+        let expected_pairs = teams.len() * (teams.len() - 1) / 2;
+        assert_eq!(seen_pairs.len(), expected_pairs, "missing pairings for {teams:?}");
+
+        if teams.len() % 2 != 0 {
+            for (team, count) in &bye_counts {
+                assert_eq!(*count, 1, "team {team} did not get exactly one bye in {teams:?}");
+            }
+        }
+    }
+}

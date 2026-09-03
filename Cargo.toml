@@ -1,0 +1,13 @@
+[package]
+name = "fixture-scheduler"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Round-robin fixture scheduling for sports leagues"
+authors = ["ahhall6"]
+
+[lib]
+name = "fixture_scheduler"
+path = "src/lib.rs"
+
+[dependencies]
