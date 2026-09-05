@@ -107,3 +107,32 @@ pub fn round_robin(teams: &[&str]) -> Result<Vec<Round>, ScheduleError> {
 
     Ok(rounds)
 }
+
+/// Builds a double round-robin schedule: every pairing from
+/// [`round_robin`], followed by a second leg with home and away swapped.
+///
+/// The second leg is a mirror of the first rather than an independently
+/// rotated schedule, so a team that hosted another in round 3 of the
+/// first leg will visit them in the equivalent round of the second leg.
+/// Byes carry over unchanged, since the team sitting out a round in the
+/// first leg sits out the same round again in the second.
+pub fn double_round_robin(teams: &[&str]) -> Result<Vec<Round>, ScheduleError> {
+    let first_leg = round_robin(teams)?;
+    let legs_offset = first_leg.len();
+
+    let mut rounds = first_leg.clone();
+    for round in &first_leg {
+        let fixtures = round
+            .fixtures
+            .iter()
+            .map(|f| Fixture { home: f.away.clone(), away: f.home.clone() })
+            .collect();
+        rounds.push(Round {
+            number: round.number + legs_offset,
+            fixtures,
+            bye: round.bye.clone(),
+        });
+    }
+
+    Ok(rounds)
+}

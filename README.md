@@ -45,11 +45,23 @@ With five teams (an odd number) this produces five rounds, two fixtures
 per round, and one bye per round that rotates so each team sits out
 exactly once over the course of the schedule.
 
+If you need a home-and-away season instead of a single leg, use
+[`double_round_robin`] - it runs the same schedule twice, with home and
+away swapped on the second leg, and continues the round numbering from
+where the first leg left off.
+
+```rust
+use fixture_scheduler::double_round_robin;
+
+let teams = ["Ospreys", "Kestrels", "Harriers", "Falcons"];
+let rounds = double_round_robin(&teams).expect("valid schedule");
+assert_eq!(rounds.len(), 6); // 3 rounds per leg, two legs
+```
+
 ## What it does not do
 
 - No fixture *dates* or venues - this only decides who plays whom, and
   in what round. Slotting rounds onto a calendar is a separate concern.
-- No double round-robin (home and away leg) yet - see the roadmap.
 - No standings or results tracking. This library only produces the
   schedule.
 

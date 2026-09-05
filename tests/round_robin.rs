@@ -1,4 +1,4 @@
-use fixture_scheduler::{round_robin, ScheduleError};
+use fixture_scheduler::{double_round_robin, round_robin, ScheduleError};
 use std::collections::HashSet;
 
 struct ErrorCase {
@@ -185,6 +185,54 @@ fn covers_every_pair_exactly_once() {
         if teams.len() % 2 != 0 {
             for (team, count) in &bye_counts {
                 assert_eq!(*count, 1, "team {team} did not get exactly one bye in {teams:?}");
+            }
+        }
+    }
+}
+
+#[test]
+fn double_round_robin_propagates_errors() {
+    assert_eq!(double_round_robin(&["Falcons"]), Err(ScheduleError::NotEnoughTeams));
+    assert_eq!(
+        double_round_robin(&["A", "B", "A"]),
+        Err(ScheduleError::DuplicateTeam("A".to_string()))
+    );
+}
+
+#[test]
+fn double_round_robin_mirrors_the_first_leg() {
+    let cases: &[&[&str]] = &[&["A", "B", "C", "D"], &["A", "B", "C", "D", "E"]];
+
+    for teams in cases {
+        let single = round_robin(teams).unwrap();
+        let double = double_round_robin(teams).unwrap();
+
+        assert_eq!(double.len(), single.len() * 2, "wrong round count for {teams:?}");
+
+        let (first_leg, second_leg) = double.split_at(single.len());
+
+        assert_eq!(first_leg, single.as_slice(), "first leg should match a single round-robin");
+
+        for (first_round, second_round) in first_leg.iter().zip(second_leg) {
+            assert_eq!(
+                second_round.number,
+                first_round.number + single.len(),
+                "second leg round numbers should continue from the first"
+            );
+            assert_eq!(
+                second_round.bye, first_round.bye,
+                "the same team should sit out the mirrored round"
+            );
+            assert_eq!(
+                second_round.fixtures.len(),
+                first_round.fixtures.len(),
+                "mirrored round should have the same number of fixtures"
+            );
+            for (first_fixture, second_fixture) in
+                first_round.fixtures.iter().zip(&second_round.fixtures)
+            {
+                assert_eq!(second_fixture.home, first_fixture.away, "home/away should be swapped");
+                assert_eq!(second_fixture.away, first_fixture.home, "home/away should be swapped");
             }
         }
     }
