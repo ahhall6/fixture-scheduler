@@ -58,6 +58,16 @@ let rounds = double_round_robin(&teams).expect("valid schedule");
 assert_eq!(rounds.len(), 6); // 3 rounds per leg, two legs
 ```
 
+## Optional features
+
+- `json` - adds `schedule_to_json`, plus `to_json` methods on `Fixture` and
+  `Round`, for rendering a schedule as JSON without pulling in serde.
+
+```toml
+[dependencies]
+fixture-scheduler = { path = "../fixture-scheduler", features = ["json"] }
+```
+
 ## What it does not do
 
 - No fixture *dates* or venues - this only decides who plays whom, and

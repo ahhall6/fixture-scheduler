@@ -11,3 +11,6 @@ name = "fixture_scheduler"
 path = "src/lib.rs"
 
 [dependencies]
+
+[features]
+json = []

@@ -136,3 +136,63 @@ pub fn double_round_robin(teams: &[&str]) -> Result<Vec<Round>, ScheduleError> {
 
     Ok(rounds)
 }
+
+// Hand-rolled JSON output, no serde. The format is fixed and small enough
+// (fixtures, a round number, an optional bye) that pulling in a dependency
+// just to write a handful of string literals isn't worth it.
+#[cfg(feature = "json")]
+mod json {
+    use super::{Fixture, Round};
+
+    fn escape(s: &str) -> String {
+        let mut out = String::with_capacity(s.len() + 2);
+        out.push('"');
+        for c in s.chars() {
+            match c {
+                '"' => out.push_str("\\\""),
+                '\\' => out.push_str("\\\\"),
+                '\n' => out.push_str("\\n"),
+                '\r' => out.push_str("\\r"),
+                '\t' => out.push_str("\\t"),
+                c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+                c => out.push(c),
+            }
+        }
+        out.push('"');
+        out
+    }
+
+    impl Fixture {
+        /// Renders this fixture as a JSON object: `{"home": "...", "away": "..."}`.
+        pub fn to_json(&self) -> String {
+            format!("{{\"home\":{},\"away\":{}}}", escape(&self.home), escape(&self.away))
+        }
+    }
+
+    impl Round {
+        /// Renders this round as a JSON object with `number`, `fixtures`, and `bye` fields.
+        pub fn to_json(&self) -> String {
+            let fixtures: Vec<String> = self.fixtures.iter().map(Fixture::to_json).collect();
+            let bye = match &self.bye {
+                Some(name) => escape(name),
+                None => "null".to_string(),
+            };
+            format!(
+                "{{\"number\":{},\"fixtures\":[{}],\"bye\":{}}}",
+                self.number,
+                fixtures.join(","),
+                bye
+            )
+        }
+    }
+
+    /// Renders a full schedule, as returned by [`super::round_robin`] or
+    /// [`super::double_round_robin`], as a JSON array of rounds.
+    pub fn schedule_to_json(rounds: &[Round]) -> String {
+        let rounds: Vec<String> = rounds.iter().map(Round::to_json).collect();
+        format!("[{}]", rounds.join(","))
+    }
+}
+
+#[cfg(feature = "json")]
+pub use json::schedule_to_json;
