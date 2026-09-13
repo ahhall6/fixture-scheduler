@@ -58,6 +58,23 @@ let rounds = double_round_robin(&teams).expect("valid schedule");
 assert_eq!(rounds.len(), 6); // 3 rounds per leg, two legs
 ```
 
+By default, round one's pairings come from the order you pass `teams` in.
+If you'd rather keep your team list in some other order (alphabetical, by
+id) and still control who opens the season against whom, use
+[`round_robin_seeded`] (or [`double_round_robin_seeded`]) and pass the
+opening order separately:
+
+```rust
+use fixture_scheduler::round_robin_seeded;
+
+let teams = ["Buzzards", "Falcons", "Harriers", "Kestrels", "Ospreys"];
+let opening_order = ["Ospreys", "Kestrels", "Harriers", "Falcons", "Buzzards"];
+let rounds = round_robin_seeded(&teams, &opening_order).expect("valid schedule");
+```
+
+`seed` must contain exactly the teams in `teams`, each once, or you'll get
+`ScheduleError::SeedMismatch`.
+
 ## Optional features
 
 - `json` - adds `schedule_to_json`, plus `to_json` methods on `Fixture` and

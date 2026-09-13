@@ -1,4 +1,7 @@
-use fixture_scheduler::{double_round_robin, round_robin, ScheduleError};
+use fixture_scheduler::{
+    double_round_robin, double_round_robin_seeded, round_robin, round_robin_seeded,
+    ScheduleError,
+};
 use std::collections::HashSet;
 
 struct ErrorCase {
@@ -186,6 +189,84 @@ fn covers_every_pair_exactly_once() {
             for (team, count) in &bye_counts {
                 assert_eq!(*count, 1, "team {team} did not get exactly one bye in {teams:?}");
             }
+        }
+    }
+}
+
+#[test]
+fn seeded_schedule_uses_seed_order_for_round_one() {
+    let teams = ["A", "B", "C", "D"];
+
+    let default_first_round = round_robin(&teams).unwrap()[0].clone();
+    let seeded_first_round =
+        round_robin_seeded(&teams, &["D", "C", "B", "A"]).unwrap()[0].clone();
+
+    assert_ne!(
+        default_first_round, seeded_first_round,
+        "reversing the seed should change who plays whom in round one"
+    );
+
+    // The seeded schedule should still be a full, valid round-robin: same
+    // round count, same fixture shape, just a different starting pairing.
+    let unseeded = round_robin(&teams).unwrap();
+    let seeded = round_robin_seeded(&teams, &["D", "C", "B", "A"]).unwrap();
+    assert_eq!(seeded.len(), unseeded.len());
+    for round in &seeded {
+        assert_eq!(round.fixtures.len(), 2);
+        assert!(round.bye.is_none());
+    }
+}
+
+#[test]
+fn seeded_schedule_rejects_mismatched_seed() {
+    let teams = ["A", "B", "C"];
+
+    assert_eq!(
+        round_robin_seeded(&teams, &["A", "B", "D"]),
+        Err(ScheduleError::SeedMismatch),
+        "seed with a team not in the roster should be rejected"
+    );
+    assert_eq!(
+        round_robin_seeded(&teams, &["A", "B"]),
+        Err(ScheduleError::SeedMismatch),
+        "seed missing a team should be rejected"
+    );
+    assert_eq!(
+        round_robin_seeded(&teams, &["A", "A", "C"]),
+        Err(ScheduleError::SeedMismatch),
+        "seed with a duplicate standing in for a missing team should be rejected"
+    );
+}
+
+#[test]
+fn seeded_schedule_still_checks_the_roster_first() {
+    assert_eq!(
+        round_robin_seeded(&["Falcons"], &["Falcons"]),
+        Err(ScheduleError::NotEnoughTeams)
+    );
+    assert_eq!(
+        round_robin_seeded(&["A", "A"], &["A", "A"]),
+        Err(ScheduleError::DuplicateTeam("A".to_string()))
+    );
+}
+
+#[test]
+fn double_round_robin_seeded_mirrors_the_seeded_first_leg() {
+    let teams = ["A", "B", "C", "D"];
+    let seed = ["D", "C", "B", "A"];
+
+    let single = round_robin_seeded(&teams, &seed).unwrap();
+    let double = double_round_robin_seeded(&teams, &seed).unwrap();
+
+    assert_eq!(double.len(), single.len() * 2);
+    let (first_leg, second_leg) = double.split_at(single.len());
+    assert_eq!(first_leg, single.as_slice());
+    for (first_round, second_round) in first_leg.iter().zip(second_leg) {
+        for (first_fixture, second_fixture) in
+            first_round.fixtures.iter().zip(&second_round.fixtures)
+        {
+            assert_eq!(second_fixture.home, first_fixture.away);
+            assert_eq!(second_fixture.away, first_fixture.home);
         }
     }
 }

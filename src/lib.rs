@@ -29,6 +29,7 @@ pub struct Round {
 pub enum ScheduleError {
     NotEnoughTeams,
     DuplicateTeam(String),
+    SeedMismatch,
 }
 
 impl fmt::Display for ScheduleError {
@@ -39,6 +40,9 @@ impl fmt::Display for ScheduleError {
             }
             ScheduleError::DuplicateTeam(name) => {
                 write!(f, "team '{name}' appears more than once")
+            }
+            ScheduleError::SeedMismatch => {
+                write!(f, "seed must contain exactly the same teams as the schedule, each once")
             }
         }
     }
@@ -52,13 +56,7 @@ impl std::error::Error for ScheduleError {}
 // duplicate check first.
 const BYE: &str = "BYE";
 
-/// Builds a single round-robin schedule for the given teams.
-///
-/// Uses the standard "circle method": one team is held fixed and the
-/// rest rotate around it one position per round, which guarantees every
-/// pair meets exactly once in `n - 1` rounds (or `n` rounds if a bye is
-/// needed to make the count even).
-pub fn round_robin(teams: &[&str]) -> Result<Vec<Round>, ScheduleError> {
+fn validate_teams(teams: &[&str]) -> Result<(), ScheduleError> {
     if teams.len() < 2 {
         return Err(ScheduleError::NotEnoughTeams);
     }
@@ -69,7 +67,47 @@ pub fn round_robin(teams: &[&str]) -> Result<Vec<Round>, ScheduleError> {
             }
         }
     }
+    Ok(())
+}
 
+/// Builds a single round-robin schedule for the given teams.
+///
+/// Uses the standard "circle method": one team is held fixed and the
+/// rest rotate around it one position per round, which guarantees every
+/// pair meets exactly once in `n - 1` rounds (or `n` rounds if a bye is
+/// needed to make the count even).
+///
+/// The order of `teams` decides who plays whom in round one (the circle
+/// method pairs position `i` against position `n - 1 - i`). To pick that
+/// opening matchup deliberately without reshuffling your canonical team
+/// list, use [`round_robin_seeded`] instead.
+pub fn round_robin(teams: &[&str]) -> Result<Vec<Round>, ScheduleError> {
+    validate_teams(teams)?;
+    Ok(build_schedule(teams))
+}
+
+/// Like [`round_robin`], but schedules the teams in the order given by
+/// `seed` rather than the order of `teams` itself.
+///
+/// `seed` must contain exactly the teams in `teams`, each appearing once,
+/// in whatever order the caller wants round one to pair them. This lets a
+/// caller keep `teams` in its natural order (alphabetical, by id, however
+/// it's stored) while still controlling the opening-round matchups.
+pub fn round_robin_seeded(teams: &[&str], seed: &[&str]) -> Result<Vec<Round>, ScheduleError> {
+    validate_teams(teams)?;
+
+    let mut teams_sorted = teams.to_vec();
+    teams_sorted.sort_unstable();
+    let mut seed_sorted = seed.to_vec();
+    seed_sorted.sort_unstable();
+    if teams_sorted != seed_sorted {
+        return Err(ScheduleError::SeedMismatch);
+    }
+
+    Ok(build_schedule(seed))
+}
+
+fn build_schedule(teams: &[&str]) -> Vec<Round> {
     let mut arr: Vec<String> = teams.iter().map(|s| s.to_string()).collect();
     if arr.len() % 2 != 0 {
         arr.push(BYE.to_string());
@@ -105,7 +143,7 @@ pub fn round_robin(teams: &[&str]) -> Result<Vec<Round>, ScheduleError> {
         arr.insert(1, last);
     }
 
-    Ok(rounds)
+    rounds
 }
 
 /// Builds a double round-robin schedule: every pairing from
@@ -117,7 +155,20 @@ pub fn round_robin(teams: &[&str]) -> Result<Vec<Round>, ScheduleError> {
 /// Byes carry over unchanged, since the team sitting out a round in the
 /// first leg sits out the same round again in the second.
 pub fn double_round_robin(teams: &[&str]) -> Result<Vec<Round>, ScheduleError> {
-    let first_leg = round_robin(teams)?;
+    Ok(mirror_second_leg(round_robin(teams)?))
+}
+
+/// Like [`double_round_robin`], but schedules the first leg with
+/// [`round_robin_seeded`] so the caller controls the opening-round
+/// matchups. See that function for what `seed` must contain.
+pub fn double_round_robin_seeded(
+    teams: &[&str],
+    seed: &[&str],
+) -> Result<Vec<Round>, ScheduleError> {
+    Ok(mirror_second_leg(round_robin_seeded(teams, seed)?))
+}
+
+fn mirror_second_leg(first_leg: Vec<Round>) -> Vec<Round> {
     let legs_offset = first_leg.len();
 
     let mut rounds = first_leg.clone();
@@ -134,7 +185,7 @@ pub fn double_round_robin(teams: &[&str]) -> Result<Vec<Round>, ScheduleError> {
         });
     }
 
-    Ok(rounds)
+    rounds
 }
 
 // Hand-rolled JSON output, no serde. The format is fixed and small enough
