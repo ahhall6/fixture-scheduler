@@ -5,7 +5,14 @@
 //! split into rounds of simultaneous fixtures. Odd-sized leagues get a
 //! rotating bye, distributed so no team sits out twice before everyone
 //! else has sat out once.
+//!
+//! The core scheduling functions identify teams by a plain `&str`. When a
+//! team's id (used for lookups, storage, external systems) needs to
+//! differ from what gets shown on a fixture list, use [`Team`] and the
+//! `_teams` variants ([`round_robin_teams`], [`double_round_robin_teams`],
+//! and their seeded counterparts) instead.
 
+use std::collections::HashMap;
 use std::fmt;
 
 /// A single match between two teams within a round.
@@ -23,6 +30,52 @@ pub struct Round {
     pub number: usize,
     pub fixtures: Vec<Fixture>,
     pub bye: Option<String>,
+}
+
+/// A team with a stable id kept separate from the name shown on fixture
+/// lists. Useful when the id is a database key, a slug, or anything else
+/// that shouldn't change even if the team's display name does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Team {
+    pub id: String,
+    pub name: String,
+}
+
+impl Team {
+    pub fn new(id: impl Into<String>, name: impl Into<String>) -> Self {
+        Team { id: id.into(), name: name.into() }
+    }
+}
+
+impl fmt::Display for Team {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+impl From<&str> for Team {
+    /// Builds a team whose id and display name are the same string.
+    fn from(name: &str) -> Self {
+        Team { id: name.to_string(), name: name.to_string() }
+    }
+}
+
+/// A single match between two teams within a round, identified by [`Team`]
+/// rather than a raw string. Produced by [`round_robin_teams`] and its
+/// siblings.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TeamFixture {
+    pub home: Team,
+    pub away: Team,
+}
+
+/// One round of a [`Team`]-based schedule. See [`Round`] for the
+/// string-based equivalent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TeamRound {
+    pub number: usize,
+    pub fixtures: Vec<TeamFixture>,
+    pub bye: Option<Team>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -186,6 +239,66 @@ fn mirror_second_leg(first_leg: Vec<Round>) -> Vec<Round> {
     }
 
     rounds
+}
+
+/// Like [`round_robin`], but takes and returns [`Team`] values so a team's
+/// id (used for scheduling and lookups) can differ from its display name.
+pub fn round_robin_teams(teams: &[Team]) -> Result<Vec<TeamRound>, ScheduleError> {
+    let ids: Vec<&str> = teams.iter().map(|t| t.id.as_str()).collect();
+    let rounds = round_robin(&ids)?;
+    Ok(rounds.into_iter().map(|r| resolve_round(r, teams)).collect())
+}
+
+/// Like [`round_robin_seeded`], but takes and returns [`Team`] values. The
+/// teams in `seed` are matched to `teams` by id, so `seed` may reuse the
+/// same [`Team`] values or hand back different display names for the same
+/// ids -- the ids are what decide the pairing.
+pub fn round_robin_teams_seeded(
+    teams: &[Team],
+    seed: &[Team],
+) -> Result<Vec<TeamRound>, ScheduleError> {
+    let ids: Vec<&str> = teams.iter().map(|t| t.id.as_str()).collect();
+    let seed_ids: Vec<&str> = seed.iter().map(|t| t.id.as_str()).collect();
+    let rounds = round_robin_seeded(&ids, &seed_ids)?;
+    Ok(rounds.into_iter().map(|r| resolve_round(r, teams)).collect())
+}
+
+/// Like [`double_round_robin`], but takes and returns [`Team`] values.
+pub fn double_round_robin_teams(teams: &[Team]) -> Result<Vec<TeamRound>, ScheduleError> {
+    let ids: Vec<&str> = teams.iter().map(|t| t.id.as_str()).collect();
+    let rounds = double_round_robin(&ids)?;
+    Ok(rounds.into_iter().map(|r| resolve_round(r, teams)).collect())
+}
+
+/// Like [`double_round_robin_seeded`], but takes and returns [`Team`]
+/// values. See [`round_robin_teams_seeded`] for what `seed` must contain.
+pub fn double_round_robin_teams_seeded(
+    teams: &[Team],
+    seed: &[Team],
+) -> Result<Vec<TeamRound>, ScheduleError> {
+    let ids: Vec<&str> = teams.iter().map(|t| t.id.as_str()).collect();
+    let seed_ids: Vec<&str> = seed.iter().map(|t| t.id.as_str()).collect();
+    let rounds = double_round_robin_seeded(&ids, &seed_ids)?;
+    Ok(rounds.into_iter().map(|r| resolve_round(r, teams)).collect())
+}
+
+// The string-based scheduler already does all the real work; this just
+// looks each id back up to the Team it came from so callers get their
+// display names back.
+fn resolve_round(round: Round, teams: &[Team]) -> TeamRound {
+    let lookup: HashMap<&str, &Team> = teams.iter().map(|t| (t.id.as_str(), t)).collect();
+    TeamRound {
+        number: round.number,
+        fixtures: round
+            .fixtures
+            .into_iter()
+            .map(|f| TeamFixture {
+                home: lookup[f.home.as_str()].clone(),
+                away: lookup[f.away.as_str()].clone(),
+            })
+            .collect(),
+        bye: round.bye.map(|id| lookup[id.as_str()].clone()),
+    }
 }
 
 // Hand-rolled JSON output, no serde. The format is fixed and small enough
