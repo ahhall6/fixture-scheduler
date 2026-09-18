@@ -11,6 +11,9 @@
 //! differ from what gets shown on a fixture list, use [`Team`] and the
 //! `_teams` variants ([`round_robin_teams`], [`double_round_robin_teams`],
 //! and their seeded counterparts) instead.
+//!
+//! Once you have rounds, [`slot_dates`] spaces them out onto a calendar,
+//! skipping any blackout dates you give it.
 
 use std::collections::HashMap;
 use std::fmt;
@@ -299,6 +302,99 @@ fn resolve_round(round: Round, teams: &[Team]) -> TeamRound {
             .collect(),
         bye: round.bye.map(|id| lookup[id.as_str()].clone()),
     }
+}
+
+/// A plain Gregorian calendar date - no time of day, no time zone.
+///
+/// Fixture rounds only ever need a day to land on, not a moment in time,
+/// so this stays deliberately smaller than anything in `std::time`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Date {
+    pub year: i32,
+    pub month: u32,
+    pub day: u32,
+}
+
+impl Date {
+    /// Builds a date, rejecting anything that isn't a real calendar day
+    /// (month 13, February 30, and so on).
+    pub fn new(year: i32, month: u32, day: u32) -> Option<Date> {
+        if month < 1 || month > 12 {
+            return None;
+        }
+        if day < 1 || day > days_in_month(year, month) {
+            return None;
+        }
+        Some(Date { year, month, day })
+    }
+
+    /// The calendar day immediately after this one.
+    pub fn next_day(&self) -> Date {
+        let mut year = self.year;
+        let mut month = self.month;
+        let mut day = self.day + 1;
+        if day > days_in_month(year, month) {
+            day = 1;
+            month += 1;
+            if month > 12 {
+                month = 1;
+                year += 1;
+            }
+        }
+        Date { year, month, day }
+    }
+
+    /// This date plus `days` calendar days.
+    pub fn add_days(&self, days: u32) -> Date {
+        let mut date = *self;
+        for _ in 0..days {
+            date = date.next_day();
+        }
+        date
+    }
+}
+
+impl fmt::Display for Date {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:04}-{:02}-{:02}", self.year, self.month, self.day)
+    }
+}
+
+fn is_leap_year(year: i32) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+}
+
+fn days_in_month(year: i32, month: u32) -> u32 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 => if is_leap_year(year) { 29 } else { 28 },
+        _ => unreachable!("Date only ever holds a month already validated as 1..=12"),
+    }
+}
+
+/// Assigns each of `num_rounds` rounds a [`Date`], `interval_days` apart
+/// starting from `start`, skipping over any date in `blackout`.
+///
+/// Each round's base date is `start + interval_days * round_index`, so a
+/// blackout only pushes that one round's date forward - it doesn't drag
+/// every later round along with it. If a base date and its blackout-driven
+/// shift both land on later rounds' base dates, this doesn't try to
+/// resolve the clash; for the small leagues this crate targets, pick an
+/// `interval_days` wider than your blackout stretches and it won't come up.
+///
+/// The result lines up with the rounds a scheduler like [`round_robin`]
+/// produces by position: `dates[i]` is round `i + 1`'s date.
+pub fn slot_dates(num_rounds: usize, start: Date, interval_days: u32, blackout: &[Date]) -> Vec<Date> {
+    let mut dates = Vec::with_capacity(num_rounds);
+    for round in 0..num_rounds {
+        let mut date = start.add_days(interval_days.saturating_mul(round as u32));
+        while blackout.contains(&date) {
+            date = date.next_day();
+        }
+        dates.push(date);
+    }
+    dates
 }
 
 // Hand-rolled JSON output, no serde. The format is fixed and small enough

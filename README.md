@@ -75,6 +75,31 @@ let rounds = round_robin_seeded(&teams, &opening_order).expect("valid schedule")
 `seed` must contain exactly the teams in `teams`, each once, or you'll get
 `ScheduleError::SeedMismatch`.
 
+## Putting rounds on a calendar
+
+`round_robin` only decides who plays whom and in what order; it doesn't
+know about dates. [`slot_dates`] fills that gap for the common case of
+"one round every N days, skipping any blackout dates":
+
+```rust
+use fixture_scheduler::{round_robin, slot_dates, Date};
+
+let teams = ["Ospreys", "Kestrels", "Harriers", "Falcons"];
+let rounds = round_robin(&teams).expect("valid schedule");
+
+let start = Date::new(2026, 3, 7).unwrap();
+let blackout = [Date::new(2026, 3, 21).unwrap()]; // e.g. a public holiday
+let dates = slot_dates(rounds.len(), start, 7, &blackout);
+
+for (round, date) in rounds.iter().zip(&dates) {
+    println!("Round {} - {date}", round.number);
+}
+```
+
+A blackout only pushes that one round's date forward a day at a time; it
+doesn't drag every later round along with it, since each round's base
+date is still `start + interval_days * round_index`.
+
 ## Optional features
 
 - `json` - adds `schedule_to_json`, plus `to_json` methods on `Fixture` and
@@ -87,8 +112,9 @@ fixture-scheduler = { path = "../fixture-scheduler", features = ["json"] }
 
 ## What it does not do
 
-- No fixture *dates* or venues - this only decides who plays whom, and
-  in what round. Slotting rounds onto a calendar is a separate concern.
+- No venues, kickoff times, or scheduling constraints beyond dates and
+  blackout days - `slot_dates` only spaces rounds out and skips blackout
+  dates, it doesn't know about venue availability or team travel.
 - No standings or results tracking. This library only produces the
   schedule.
 
