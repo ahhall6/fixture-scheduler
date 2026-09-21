@@ -1,4 +1,6 @@
-use fixture_scheduler::{slot_dates, Date};
+use fixture_scheduler::{
+    round_robin, round_robin_teams, slot_dates, slot_rounds, slot_team_rounds, Date, Team,
+};
 
 #[test]
 fn rejects_impossible_calendar_dates() {
@@ -84,4 +86,48 @@ fn skips_over_multiple_consecutive_blackout_days() {
 fn date_displays_as_iso_8601() {
     let date = Date::new(2026, 3, 7).unwrap();
     assert_eq!(date.to_string(), "2026-03-07");
+}
+
+#[test]
+fn slot_rounds_pairs_each_round_with_its_date() {
+    let teams = ["Ants", "Bees", "Cats", "Dogs"];
+    let rounds = round_robin(&teams).unwrap();
+    let start = Date::new(2026, 3, 7).unwrap();
+
+    let slotted = slot_rounds(&rounds, start, 7, &[]);
+    let expected_dates = slot_dates(rounds.len(), start, 7, &[]);
+
+    assert_eq!(slotted.len(), rounds.len());
+    for (i, entry) in slotted.iter().enumerate() {
+        assert_eq!(entry.round, rounds[i]);
+        assert_eq!(entry.date, expected_dates[i]);
+    }
+}
+
+#[test]
+fn slot_rounds_honors_blackouts_like_slot_dates() {
+    let teams = ["Ants", "Bees"];
+    let rounds = round_robin(&teams).unwrap();
+    let start = Date::new(2026, 3, 7).unwrap();
+    let blackout = [Date::new(2026, 3, 7).unwrap()];
+
+    let slotted = slot_rounds(&rounds, start, 7, &blackout);
+
+    assert_eq!(slotted[0].date, Date::new(2026, 3, 8).unwrap());
+}
+
+#[test]
+fn slot_team_rounds_pairs_each_round_with_its_date() {
+    let teams = [Team::new("ants", "Ants"), Team::new("bees", "Bees"), Team::new("cats", "Cats")];
+    let rounds = round_robin_teams(&teams).unwrap();
+    let start = Date::new(2026, 3, 7).unwrap();
+
+    let slotted = slot_team_rounds(&rounds, start, 7, &[]);
+    let expected_dates = slot_dates(rounds.len(), start, 7, &[]);
+
+    assert_eq!(slotted.len(), rounds.len());
+    for (i, entry) in slotted.iter().enumerate() {
+        assert_eq!(entry.round, rounds[i]);
+        assert_eq!(entry.date, expected_dates[i]);
+    }
 }

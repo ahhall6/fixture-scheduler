@@ -13,7 +13,9 @@
 //! and their seeded counterparts) instead.
 //!
 //! Once you have rounds, [`slot_dates`] spaces them out onto a calendar,
-//! skipping any blackout dates you give it.
+//! skipping any blackout dates you give it. [`slot_rounds`] and
+//! [`slot_team_rounds`] do the same but hand back each round paired with
+//! its date, so callers don't have to zip the two lists back together.
 
 use std::collections::HashMap;
 use std::fmt;
@@ -395,6 +397,55 @@ pub fn slot_dates(num_rounds: usize, start: Date, interval_days: u32, blackout: 
         dates.push(date);
     }
     dates
+}
+
+/// A [`Round`] paired with the date it's scheduled on. Produced by
+/// [`slot_rounds`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SlottedRound {
+    pub round: Round,
+    pub date: Date,
+}
+
+/// Pairs each of `rounds` with a date from [`slot_dates`], so callers get
+/// a round and its date together instead of zipping two parallel lists.
+///
+/// `rounds` is matched to dates by position, same as `slot_dates` itself -
+/// `rounds[i]` gets `dates[i]`.
+pub fn slot_rounds(
+    rounds: &[Round],
+    start: Date,
+    interval_days: u32,
+    blackout: &[Date],
+) -> Vec<SlottedRound> {
+    slot_dates(rounds.len(), start, interval_days, blackout)
+        .into_iter()
+        .zip(rounds.iter().cloned())
+        .map(|(date, round)| SlottedRound { round, date })
+        .collect()
+}
+
+/// A [`TeamRound`] paired with the date it's scheduled on. Produced by
+/// [`slot_team_rounds`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SlottedTeamRound {
+    pub round: TeamRound,
+    pub date: Date,
+}
+
+/// Like [`slot_rounds`], but for the [`TeamRound`] schedules produced by
+/// [`round_robin_teams`] and its siblings.
+pub fn slot_team_rounds(
+    rounds: &[TeamRound],
+    start: Date,
+    interval_days: u32,
+    blackout: &[Date],
+) -> Vec<SlottedTeamRound> {
+    slot_dates(rounds.len(), start, interval_days, blackout)
+        .into_iter()
+        .zip(rounds.iter().cloned())
+        .map(|(date, round)| SlottedTeamRound { round, date })
+        .collect()
 }
 
 // Hand-rolled JSON output, no serde. The format is fixed and small enough
