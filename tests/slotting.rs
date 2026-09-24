@@ -1,5 +1,6 @@
 use fixture_scheduler::{
     round_robin, round_robin_teams, slot_dates, slot_rounds, slot_team_rounds, Date, Team,
+    WEEKLY_INTERVAL_DAYS,
 };
 
 #[test]
@@ -51,6 +52,13 @@ fn slots_rounds_at_the_requested_interval_with_no_blackouts() {
             Date::new(2026, 3, 28).unwrap(),
         ]
     );
+}
+
+#[test]
+fn weekly_interval_days_constant_matches_seven() {
+    let start = Date::new(2026, 3, 7).unwrap();
+    assert_eq!(WEEKLY_INTERVAL_DAYS, 7);
+    assert_eq!(slot_dates(2, start, WEEKLY_INTERVAL_DAYS, &[]), slot_dates(2, start, 7, &[]));
 }
 
 #[test]

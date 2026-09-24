@@ -82,14 +82,14 @@ know about dates. [`slot_dates`] fills that gap for the common case of
 "one round every N days, skipping any blackout dates":
 
 ```rust
-use fixture_scheduler::{round_robin, slot_dates, Date};
+use fixture_scheduler::{round_robin, slot_dates, Date, WEEKLY_INTERVAL_DAYS};
 
 let teams = ["Ospreys", "Kestrels", "Harriers", "Falcons"];
 let rounds = round_robin(&teams).expect("valid schedule");
 
 let start = Date::new(2026, 3, 7).unwrap();
 let blackout = [Date::new(2026, 3, 21).unwrap()]; // e.g. a public holiday
-let dates = slot_dates(rounds.len(), start, 7, &blackout);
+let dates = slot_dates(rounds.len(), start, WEEKLY_INTERVAL_DAYS, &blackout);
 
 for (round, date) in rounds.iter().zip(&dates) {
     println!("Round {} - {date}", round.number);

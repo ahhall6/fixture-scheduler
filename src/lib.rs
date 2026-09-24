@@ -375,6 +375,13 @@ fn days_in_month(year: i32, month: u32) -> u32 {
     }
 }
 
+/// The interval most leagues actually want: one round a week. There's no
+/// way to give `interval_days` an actual default (Rust has no default
+/// arguments), so this exists as a named stand-in for a bare `7` at call
+/// sites - it reads as "weekly" instead of a number someone has to double
+/// check against a calendar.
+pub const WEEKLY_INTERVAL_DAYS: u32 = 7;
+
 /// Assigns each of `num_rounds` rounds a [`Date`], `interval_days` apart
 /// starting from `start`, skipping over any date in `blackout`.
 ///
