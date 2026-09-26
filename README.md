@@ -100,6 +100,27 @@ A blackout only pushes that one round's date forward a day at a time; it
 doesn't drag every later round along with it, since each round's base
 date is still `start + interval_days * round_index`.
 
+Zipping `rounds` and `dates` back together by hand is common enough that
+[`slot_rounds`] does it for you, handing back each round paired with its
+date:
+
+```rust
+use fixture_scheduler::{round_robin, slot_rounds, Date, WEEKLY_INTERVAL_DAYS};
+
+let teams = ["Ospreys", "Kestrels", "Harriers", "Falcons"];
+let rounds = round_robin(&teams).expect("valid schedule");
+
+let start = Date::new(2026, 3, 7).unwrap();
+let slotted = slot_rounds(&rounds, start, WEEKLY_INTERVAL_DAYS, &[]);
+
+for entry in &slotted {
+    println!("Round {} - {}", entry.round.number, entry.date);
+}
+```
+
+[`slot_team_rounds`] is the same thing for the [`Team`]-based schedules
+that come out of `round_robin_teams` and its siblings.
+
 ## Optional features
 
 - `json` - adds `schedule_to_json`, plus `to_json` methods on `Fixture` and
