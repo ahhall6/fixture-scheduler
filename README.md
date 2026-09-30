@@ -125,6 +125,8 @@ that come out of `round_robin_teams` and its siblings.
 
 - `json` - adds `schedule_to_json`, plus `to_json` methods on `Fixture` and
   `Round`, for rendering a schedule as JSON without pulling in serde.
+  `team_schedule_to_json` does the same for `Team`-based schedules, writing
+  each team as an object with its `id` and `name`.
 
 ```toml
 [dependencies]

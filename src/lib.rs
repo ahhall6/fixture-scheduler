@@ -460,7 +460,7 @@ pub fn slot_team_rounds(
 // just to write a handful of string literals isn't worth it.
 #[cfg(feature = "json")]
 mod json {
-    use super::{Fixture, Round};
+    use super::{Fixture, Round, Team, TeamFixture, TeamRound};
 
     fn escape(s: &str) -> String {
         let mut out = String::with_capacity(s.len() + 2);
@@ -510,7 +510,46 @@ mod json {
         let rounds: Vec<String> = rounds.iter().map(Round::to_json).collect();
         format!("[{}]", rounds.join(","))
     }
+
+    impl Team {
+        /// Renders this team as `{"id": "...", "name": "..."}`. Both are
+        /// written out so a consumer can key on the id and still show the name.
+        pub fn to_json(&self) -> String {
+            format!("{{\"id\":{},\"name\":{}}}", escape(&self.id), escape(&self.name))
+        }
+    }
+
+    impl TeamFixture {
+        /// Renders this fixture as a JSON object with `home` and `away` teams.
+        pub fn to_json(&self) -> String {
+            format!("{{\"home\":{},\"away\":{}}}", self.home.to_json(), self.away.to_json())
+        }
+    }
+
+    impl TeamRound {
+        /// Renders this round as a JSON object with `number`, `fixtures`, and `bye` fields.
+        pub fn to_json(&self) -> String {
+            let fixtures: Vec<String> = self.fixtures.iter().map(TeamFixture::to_json).collect();
+            let bye = match &self.bye {
+                Some(team) => team.to_json(),
+                None => "null".to_string(),
+            };
+            format!(
+                "{{\"number\":{},\"fixtures\":[{}],\"bye\":{}}}",
+                self.number,
+                fixtures.join(","),
+                bye
+            )
+        }
+    }
+
+    /// Renders a [`Team`]-based schedule, as returned by
+    /// [`super::round_robin_teams`] and its siblings, as a JSON array of rounds.
+    pub fn team_schedule_to_json(rounds: &[TeamRound]) -> String {
+        let rounds: Vec<String> = rounds.iter().map(TeamRound::to_json).collect();
+        format!("[{}]", rounds.join(","))
+    }
 }
 
 #[cfg(feature = "json")]
-pub use json::schedule_to_json;
+pub use json::{schedule_to_json, team_schedule_to_json};
